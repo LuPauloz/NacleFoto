@@ -17,6 +17,32 @@ namespace NacleFoto.App.Services
         public static readonly string[] Extensions = { ".jpg", ".jpeg" };
         public static readonly string[] Extensoes = Extensions;
 
+        public const int DefaultMaxDepth = 8;
+
+        public static readonly HashSet<string> IgnoredDirectories = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ".git", ".vs", ".vscode", ".idea", ".github",
+            "node_modules", "_nacle", "$recycle.bin", "$sysreset",
+            "system volume information", "appdata", "windows",
+            "program files", "program files (x86)", "recovery"
+        };
+
+        public static bool ShouldSkipDirectory(string dirName, FileAttributes attrs = 0)
+        {
+            if (string.IsNullOrWhiteSpace(dirName)) return true;
+            if (IgnoredDirectories.Contains(dirName)) return true;
+            if (dirName.StartsWith(".") && dirName.Length > 1) return true;
+            if ((attrs & (FileAttributes.Hidden | FileAttributes.System)) != 0) return true;
+            return false;
+        }
+
+        private struct DirEntry
+        {
+            public string Path;
+            public int Depth;
+            public DirEntry(string path, int depth) { Path = path; Depth = depth; }
+        }
+
         /// <summary>File markers for files that are still "in the cloud" (OneDrive, etc).</summary>
         private const FileAttributes Cloud = FileAttributes.Offline | (FileAttributes)0x00400000; // RecallOnDataAccess
         private const FileAttributes Nuvem = Cloud;
@@ -61,49 +87,102 @@ namespace NacleFoto.App.Services
             {
                 if (string.IsNullOrWhiteSpace(root) || !Directory.Exists(root)) continue;
 
-                IEnumerable<string> files;
+                bool isDriveRoot = false;
                 try
                 {
-                    // enumeration can be slow in the cloud: foreach is consumed here,
-                    // but ALWAYS on a background thread (see SelectionView)
-                    files = Directory.EnumerateFiles(root, "*", SearchOption.AllDirectories);
+                    var rootPath = Path.GetFullPath(root).TrimEnd('\\') + "\\";
+                    var driveRoot = Path.GetPathRoot(rootPath);
+                    isDriveRoot = string.Equals(driveRoot, rootPath, StringComparison.OrdinalIgnoreCase);
                 }
-                catch (Exception) { continue; }
+                catch { }
 
-                try
+                int maxDepth = isDriveRoot ? 2 : DefaultMaxDepth;
+                var queue = new Queue<DirEntry>();
+                queue.Enqueue(new DirEntry(root, 0));
+
+                while (queue.Count > 0)
                 {
-                    foreach (var file in files)
+                    cancel.ThrowIfCancellationRequested();
+                    var current = queue.Dequeue();
+
+                    IEnumerable<string> dirFiles = null;
+                    try
                     {
-                        cancel.ThrowIfCancellationRequested();
+                        dirFiles = Directory.EnumerateFiles(current.Path);
+                    }
+                    catch (Exception)
+                    {
+                        continue;
+                    }
 
-                        var ext = Path.GetExtension(file).ToLowerInvariant();
-                        if (Array.IndexOf(Extensions, ext) < 0) continue;
-
-                        string relative;
-                        try { relative = GetRelativePath(root, file); }
-                        catch { continue; }
-
-                        var relNorm = relative.Replace('\\', '/');
-                        if (exclusions.Any(x => relNorm.StartsWith(x + "/", StringComparison.OrdinalIgnoreCase)))
-                            continue;
-
-                        // cloud-only file? do not wait for download
-                        if (!IsLocal(file))
+                    try
+                    {
+                        foreach (var file in dirFiles)
                         {
-                            cloudCount++;
-                            if (!includeCloud) { if (progress != null) progress(result.Count); continue; }
-                        }
+                            cancel.ThrowIfCancellationRequested();
 
+                            var ext = Path.GetExtension(file);
+                            if (string.IsNullOrEmpty(ext)) continue;
+                            ext = ext.ToLowerInvariant();
+                            if (Array.IndexOf(Extensions, ext) < 0) continue;
+
+                            string relative;
+                            try { relative = GetRelativePath(root, file); }
+                            catch { continue; }
+
+                            var relNorm = relative.Replace('\\', '/');
+                            if (exclusions.Any(x => relNorm.StartsWith(x + "/", StringComparison.OrdinalIgnoreCase)))
+                                continue;
+
+                            // cloud-only file? do not wait for download
+                            if (!IsLocal(file))
+                            {
+                                cloudCount++;
+                                if (!includeCloud) { if (progress != null) progress(result.Count); continue; }
+                            }
+
+                            try
+                            {
+                                var info = new FileInfo(file);
+                                result.Add(new PhotoItemViewModel(relNorm, file, info.Length, info.LastWriteTimeUtc.Ticks));
+                                if (progress != null && result.Count % 50 == 0) progress(result.Count);
+                            }
+                            catch (Exception) { }
+                        }
+                    }
+                    catch (OperationCanceledException) { throw; }
+                    catch (Exception) { }
+
+                    if (current.Depth < maxDepth)
+                    {
+                        IEnumerable<string> subDirs = null;
                         try
                         {
-                            var info = new FileInfo(file);
-                            result.Add(new PhotoItemViewModel(relNorm, file, info.Length, info.LastWriteTimeUtc.Ticks));
+                            subDirs = Directory.EnumerateDirectories(current.Path);
                         }
-                        catch (Exception) { }
+                        catch (Exception)
+                        {
+                            continue;
+                        }
+
+                        foreach (var dir in subDirs)
+                        {
+                            var dirName = Path.GetFileName(dir);
+                            FileAttributes attrs = 0;
+                            try { attrs = File.GetAttributes(dir); } catch { }
+
+                            if (ShouldSkipDirectory(dirName, attrs)) continue;
+
+                            string subRel;
+                            try { subRel = GetRelativePath(root, dir).Replace('\\', '/'); }
+                            catch { subRel = null; }
+                            if (!string.IsNullOrEmpty(subRel) && exclusions.Any(x => string.Equals(x, subRel, StringComparison.OrdinalIgnoreCase) || subRel.StartsWith(x + "/", StringComparison.OrdinalIgnoreCase)))
+                                continue;
+
+                            queue.Enqueue(new DirEntry(dir, current.Depth + 1));
+                        }
                     }
                 }
-                catch (OperationCanceledException) { throw; }
-                catch (Exception) { }
             }
 
             result.Sort((a, b) => string.Compare(a.RelativePath, b.RelativePath, StringComparison.OrdinalIgnoreCase));
@@ -142,11 +221,23 @@ namespace NacleFoto.App.Services
             {
                 foreach (var d in Directory.GetDirectories(root))
                 {
-                    list.Add(Path.GetFileName(d));
+                    var name = Path.GetFileName(d);
+                    FileAttributes attrs = 0;
+                    try { attrs = File.GetAttributes(d); } catch { }
+                    if (ShouldSkipDirectory(name, attrs)) continue;
+
+                    list.Add(name);
                     try
                     {
                         foreach (var d2 in Directory.GetDirectories(d))
-                            list.Add(Path.GetFileName(d) + "\\" + Path.GetFileName(d2));
+                        {
+                            var name2 = Path.GetFileName(d2);
+                            FileAttributes attrs2 = 0;
+                            try { attrs2 = File.GetAttributes(d2); } catch { }
+                            if (ShouldSkipDirectory(name2, attrs2)) continue;
+
+                            list.Add(name + "\\" + name2);
+                        }
                     }
                     catch (Exception) { }
                 }
