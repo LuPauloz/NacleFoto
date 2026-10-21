@@ -1,0 +1,106 @@
+NACLE FOTO - COMO INSTALAR E USAR
+==================================
+
+1. COPIAR PARA O COMPUTADOR
+---------------------------
+Copie a pasta inteira "NacleFoto" para o computador (por exemplo, em
+C:\NacleFoto). NÃO precisa instalar nada: o programa usa o .NET Framework 4.8,
+que já vem em todo Windows 10 e 11.
+
+Para abrir: dê dois cliques em NacleFoto.exe.
+Para deixar na área de trabalho: clique com o botão direito em NacleFoto.exe
+e escolha "Criar atalho".
+
+Para o programa abrir direto com uma pasta de fotos: clique com o botão
+direito em NacleFoto.exe > Propriedades > Atalho > em "Alvo", acrescente no
+final o caminho da pasta (ex.: "C:\NacleFoto\NacleFoto.exe" "D:\Fotos\Casamento").
+
+
+
+2. PRIMEIRO USO: CONFIGURAÇÕES
+------------------------------
+Abra "Configurações" (canto inferior direito) e:
+
+  a) Idioma: o programa já abre no idioma do computador (português em um
+     Windows em português, inglês em qualquer outro). Para forçar um, escolha
+     aqui: Automático / Português / English.
+
+  b) Telefone da gráfica: só números, com DDI e DDD.
+     Exemplo: 5511999999999
+     (Esse é o número que recebe as fotos. Confira com a gráfica antes
+     de enviar - se o número estiver errado, as fotos não chegam e o
+     programa avisa antes de mandar.)
+
+  c) Formato do envio: "fotos soltas" (recomendado), "compactado (.zip)"
+     ou os dois.
+
+  d) Clique em "Salvar".
+
+
+
+3. ENVIAR PELO WHATSAPP (UMA VEZ SÓ)
+------------------------------------
+O programa envia as fotos pelo WhatsApp usando o WAHA, um servidor de
+API do WhatsApp que roda no próprio computador. Ele é instalado pelo
+programa, em um único clique:
+
+  a) Configurações > WhatsApp (WAHA) > "Gerenciar o WhatsApp"
+
+  b) Se aparecer "Node: não instalado", clique em "Instalar o Node"
+     (o Windows baixa sozinho, pode levar alguns minutos).
+
+  c) Clique em "Instalar o WAHA" e espere. Na primeira vez demora uns
+     10 minutos (ele baixa o servidor do WhatsApp). O log mostra o
+     andamento.
+
+  d) Quando terminar, clique em "Subir o servidor".
+
+  e) Volte para as Configurações e clique em "QR code". Abra o WhatsApp
+     no celular > Aparelhos conectados > Aparelhos conectados e leia o
+     QR code com a câmera.
+
+  f) Feito. O WhatsApp está conectado e o programa sobe o servidor
+     sozinho da próxima vez que for aberto. Quando você fechar o
+     programa, o servidor desliga junto.
+
+
+
+4. MARCANDO AS FOTOS
+--------------------
+  a) Na tela inicial, clique em "Nova seleção de fotos" e escolha a pasta
+     com as fotos. Se a pasta tiver mais de um casamento, use as caixinhas
+     da esquerda para DESMARCAR as pastas de outros casamentos.
+
+  b) Clique no quadradinho das fotos para marcar (fica verde).
+     - "Marcar visíveis" marca todas as fotos que estão aparecendo na tela
+     - "Marcar todas" marca TUDO da pasta (cuidado se tiver vários casamentos)
+
+  c) Quando terminar, clique em "Fechar e preparar envio". A marcação fica
+     congelada e o programa pergunta o que fazer em seguida: enviar agora,
+     criar outra marcação ou deixar para depois.
+
+  d) Na tela de envio:
+     - "Enviar pelo WhatsApp (automático)": o programa manda as fotos pelo
+       WhatsApp, direto do arquivo original (nada é copiado, nenhuma pasta
+       é criada). É o botão principal.
+     - "Gerar link de download": cria um link para baixar as fotos
+       (padrão: sendit.sh, sem login). O link aparece escrito e copiado.
+     - "Abrir a conversa no WhatsApp": abre a conversa da gráfica no
+       WhatsApp do computador, com a mensagem pronta.
+     - "Marcar como enviado": depois que terminar.
+
+
+
+5. ALGUMAS DICAS
+----------------
+  - Clique na foto: abre em tamanho grande
+  - Clique no quadradinho: marca ou desmarca
+  - Botão direito na foto: marca ou desmarca
+  - Tecla X: marca ou desmarca a foto que está em foco
+  - Teclas <- e ->: navegam na tela grande
+  - Tecla F: ajusta a foto à tela
+  - Ctrl+Z: desfaz
+  - Esc: volta para a tela de casamentos
+
+O programa salva a marcação sozinho, junto das fotos. Você pode fechar
+o programa e voltar depois - a marcação continua lá.

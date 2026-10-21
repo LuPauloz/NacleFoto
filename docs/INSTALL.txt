@@ -1,0 +1,108 @@
+NACLE FOTO - HOW TO INSTALL AND USE
+===================================
+
+1. COPY IT TO THE COMPUTER
+--------------------------
+Copy the whole "NacleFoto" folder to the computer (for example, to
+C:\NacleFoto). You do NOT need to install anything: the app uses the
+.NET Framework 4.8, which already ships with every Windows 10 and 11.
+
+To open it: double click NacleFoto.exe.
+To put it on the desktop: right click NacleFoto.exe and choose
+"Create shortcut".
+
+To make the app open straight with a photo folder: right click
+NacleFoto.exe > Properties > Shortcut > in "Target", add the folder path
+at the end (example: "C:\NacleFoto\NacleFoto.exe" "D:\Photos\Wedding").
+
+
+
+2. FIRST RUN: SETTINGS
+----------------------
+Open "Settings" (bottom right corner) and:
+
+  a) Language: the app already opens in the language of the operating
+     system (Portuguese on a Portuguese Windows, English anywhere else).
+     To force one, pick it here: Automatic / Portuguese / English.
+
+  b) Print shop phone: digits only, with country and area code.
+     Example: 5511999999999
+     (This is the number that receives the photos. Confirm it with the
+     print shop before sending - if the number is wrong the photos never
+     arrive, and the app asks you to confirm before sending.)
+
+  c) Send format: "Loose photos" (recommended), "Compressed (.zip)" or
+     both.
+
+  d) Click "Save".
+
+
+
+3. SENDING BY WHATSAPP (ONE TIME SETUP)
+---------------------------------------
+The app sends the photos through WhatsApp using WAHA, a WhatsApp API
+server that runs on the computer itself. The app installs it for you,
+in a single click:
+
+  a) Settings > WhatsApp (WAHA) > "Manage WhatsApp"
+
+  b) If it says "Node: not installed", click "Install Node"
+     (Windows downloads it for you, it can take a few minutes).
+
+  c) Click "Install WAHA" and wait. The first time takes about
+     10 minutes (it downloads the WhatsApp server). The log shows the
+     progress.
+
+  d) When it finishes, click "Start server".
+
+  e) Go back to Settings and click "QR code". Open WhatsApp on the
+     phone > Linked devices > Linked devices and read the QR code with
+     the camera.
+
+  f) Done. WhatsApp is connected, and the app starts the server by
+     itself next time it is opened. When you close the app, the server
+     shuts down with it.
+
+
+
+4. MARKING THE PHOTOS
+---------------------
+  a) On the home screen click "New photo selection" and pick the folder
+     with the photos. If the folder holds more than one wedding, use the
+     checkboxes on the left to UNCHECK the folders of the other weddings.
+
+  b) Click the little square on the photos to mark them (it turns green).
+     - "Mark visible" marks every photo currently on screen
+     - "Mark all" marks EVERYTHING in the folder (careful when the folder
+       holds more than one wedding)
+
+  c) When you are done, click "Close and prepare send". The selection
+     freezes and the app asks what to do next: send now, create another
+     selection or do it later.
+
+  d) On the send screen:
+     - "Send by WhatsApp (automatic)": the app sends the photos through
+       WhatsApp, straight from the original file (nothing is copied, no
+       folder is created). This is the main button.
+     - "Generate download link": creates a link to download the photos
+       (default: sendit.sh, no login). The link shows up written and
+       already copied.
+     - "Open the WhatsApp chat": opens the print shop conversation in
+       WhatsApp on the computer, with the message ready.
+     - "Mark as sent": when you are done.
+
+
+
+5. A FEW TIPS
+-------------
+  - Click the photo: opens it full screen
+  - Click the little square: marks or unmarks
+  - Right click the photo: marks or unmarks
+  - X key: marks or unmarks the focused photo
+  - Left and right arrows: navigate in the full screen view
+  - F key: fits the photo to the screen
+  - Ctrl+Z: undo
+  - Esc: goes back to the wedding list
+
+The app saves the selection by itself, next to the photos. You can close
+the app and come back later - the selection is still there.

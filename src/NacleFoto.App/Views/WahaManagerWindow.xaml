@@ -1,0 +1,55 @@
+<Window x:Class="NacleFoto.App.Views.WahaManagerWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="clr-namespace:NacleFoto.App.Localization"
+        Title="WhatsApp (WAHA)" Width="720" Height="620"
+        WindowStartupLocation="CenterOwner" ResizeMode="CanResize"
+        Background="{StaticResource Fundo}" UseLayoutRounding="True"
+        TextOptions.TextFormattingMode="Display">
+    <Grid Margin="20">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <TextBlock Grid.Row="0" Foreground="{StaticResource Texto}" FontSize="19" FontWeight="SemiBold"
+                   Text="{loc:Loc waha.title}" />
+        <TextBlock Grid.Row="1" Style="{StaticResource Subtitulo}" Margin="0,6,0,14" TextWrapping="Wrap"
+                   Text="{loc:Loc waha.hint}" />
+
+        <!-- status -->
+        <Border Grid.Row="2" Background="{StaticResource Painel2}" CornerRadius="8" Padding="12" Margin="0,0,0,12">
+            <StackPanel>
+                <TextBlock x:Name="TxtNode" Style="{StaticResource Valor}" Margin="0,0,0,4" />
+                <TextBlock x:Name="TxtWaha" Style="{StaticResource Valor}" Margin="0,0,0,4" />
+                <TextBlock x:Name="TxtServidor" Style="{StaticResource Valor}" />
+                <TextBlock x:Name="TxtUpdate" Style="{StaticResource Valor}" Foreground="{StaticResource Aviso}" Margin="0,6,0,0" />
+            </StackPanel>
+        </Border>
+
+        <!-- buttons -->
+        <WrapPanel Grid.Row="3" VerticalAlignment="Top" Margin="0,0,0,12">
+            <Button x:Name="BtnNode" Content="{loc:Loc waha.installNode}" Style="{StaticResource Botao}" Click="BtnNode_Click" Margin="0,0,8,6" />
+            <Button x:Name="BtnInstall" Content="{loc:Loc waha.install}" Style="{StaticResource BotaoPrincipal}" Click="BtnInstall_Click" Margin="0,0,8,6" />
+            <Button x:Name="BtnUpdate" Content="{loc:Loc waha.update}" Style="{StaticResource Botao}" Click="BtnUpdate_Click" Margin="0,0,8,6" />
+            <Button x:Name="BtnStart" Content="{loc:Loc waha.start}" Style="{StaticResource Botao}" Click="BtnStart_Click" Margin="0,0,8,6" />
+            <Button x:Name="BtnStop" Content="{loc:Loc waha.stop}" Style="{StaticResource Botao}" Click="BtnStop_Click" Margin="0,0,8,6" />
+        </WrapPanel>
+
+        <!-- log -->
+        <Grid Grid.Row="4">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+            </Grid.RowDefinitions>
+            <TextBlock Grid.Row="0" Text="{loc:Loc waha.log}" Style="{StaticResource Rotulo}" Margin="0,0,0,4" />
+            <TextBox x:Name="CaixaLog" Grid.Row="1" IsReadOnly="True" FontFamily="Consolas" FontSize="12"
+                     Background="{StaticResource Painel2}" Foreground="{StaticResource Texto}"
+                     BorderBrush="{StaticResource Borda}" BorderThickness="1" Padding="8"
+                     VerticalScrollBarVisibility="Auto" TextWrapping="NoWrap" />
+        </Grid>
+    </Grid>
+</Window>
