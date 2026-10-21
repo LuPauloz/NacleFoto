@@ -79,6 +79,11 @@ namespace NacleFoto.App.Services
             lock (_sync) _queue.Clear();
         }
 
+        public int QueueCount
+        {
+            get { lock (_sync) return _queue.Count; }
+        }
+
         private void Loop()
         {
             while (true)

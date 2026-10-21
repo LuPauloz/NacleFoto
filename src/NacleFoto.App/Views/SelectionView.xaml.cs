@@ -367,19 +367,28 @@ namespace NacleFoto.App.Views
 
         private void PrioritizeVisible()
         {
-            if (_thumbs == null) return;
-            int first = (int)(Scroller.VerticalOffset / TileSize);
-            int last = (int)((Scroller.VerticalOffset + Scroller.ViewportHeight) / TileSize);
-            last = Math.Min(last, _rows.Count - 1);
-            for (int i = Math.Max(0, first); i <= last; i++)
+            if (_thumbs == null || _rows == null || _rows.Count == 0) return;
+            double vh = Scroller != null && Scroller.ViewportHeight > 0 ? Scroller.ViewportHeight : 900;
+            double vo = Scroller != null ? Scroller.VerticalOffset : 0;
+            int first = (int)(vo / TileSize);
+            int last = (int)((vo + vh) / TileSize);
+
+            // Viewport + small buffer (1 row before, 2 rows after) for smooth scrolling
+            int startRow = Math.Max(0, first - 1);
+            int endRow = Math.Min(_rows.Count - 1, last + 2);
+
+            for (int i = startRow; i <= endRow; i++)
+            {
+                int prio = (i >= first && i <= last) ? 0 : 5;
                 foreach (var f in _rows[i].Photos)
-                    _thumbs.Request(f, 0);
+                    _thumbs.Request(f, prio);
+            }
         }
 
         private void RequestThumbnails()
         {
-            if (_thumbs == null) return;
-            foreach (var f in _photos) _thumbs.Request(f, 10);
+            // Only request what is in the viewport and its immediate buffer
+            PrioritizeVisible();
         }
 
         // =========================== selection ===========================
