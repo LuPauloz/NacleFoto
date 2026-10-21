@@ -76,7 +76,6 @@ namespace NacleFoto.App.Views
         private int _columns = 1;
         private CancellationTokenSource _cts;
         private DispatcherTimer _saveTimer;
-        private int _exifReadCount;
         private bool _isReady;
         private bool _scanning;
         private int _lastColumn = -1;
@@ -377,12 +376,46 @@ namespace NacleFoto.App.Views
             int startRow = Math.Max(0, first - 1);
             int endRow = Math.Min(_rows.Count - 1, last + 2);
 
+            var needsExif = new List<PhotoItemViewModel>();
             for (int i = startRow; i <= endRow; i++)
             {
                 int prio = (i >= first && i <= last) ? 0 : 5;
                 foreach (var f in _rows[i].Photos)
+                {
                     _thumbs.Request(f, prio);
+                    if (f.Meta == null) needsExif.Add(f);
+                }
             }
+
+            if (needsExif.Count > 0)
+            {
+                RequestExifForVisible(needsExif);
+            }
+        }
+
+        private void RequestExifForVisible(List<PhotoItemViewModel> targets)
+        {
+            if (targets == null || targets.Count == 0) return;
+            Task.Run(() =>
+            {
+                foreach (var f in targets)
+                {
+                    if (f.Meta != null) continue;
+                    try
+                    {
+                        var m = PhotoIndexer.ReadExif(f);
+                        if (m != null)
+                        {
+                            Dispatcher.BeginInvoke(new Action(() =>
+                            {
+                                f.Meta = m;
+                                if (_focus == f) UpdateExifPanel();
+                            }));
+                        }
+                    }
+                    catch { }
+                }
+            });
         }
 
         private void RequestThumbnails()
@@ -598,6 +631,12 @@ namespace NacleFoto.App.Views
             TxtNoPhoto.Visibility = Visibility.Collapsed;
             TxtPhotoName.Text = _focus.Name;
 
+            // Ensure EXIF is loaded for the focused photo
+            if (_focus.Meta == null)
+            {
+                try { _focus.Meta = PhotoIndexer.ReadExif(_focus); } catch { }
+            }
+
             var rows = new List<ExifRow>();
             var m = _focus.Meta;
             if (m != null)
@@ -626,67 +665,19 @@ namespace NacleFoto.App.Views
 
         // =========================== background exif ===========================
 
-        private async void StartExifReading()
+        private void StartExifReading()
         {
-            if (_cts != null) { _cts.Cancel(); _cts.Dispose(); }
-            _cts = new CancellationTokenSource();
-            var token = _cts.Token;
-            _exifReadCount = 0;
-
-            var photos = _photos.ToList();
-            await Task.Run(() =>
-            {
-                // batches of 20: parallel reading within batch (2 threads, to avoid overloading
-                // low-end PCs) and applying to UI after each batch, so data appears
-                // incrementally rather than all at the end
-                const int BATCH_SIZE = 20;
-                var options = new ParallelOptions
-                {
-                    MaxDegreeOfParallelism = 1,
-                    CancellationToken = token
-                };
-
-                for (int start = 0; start < photos.Count; start += BATCH_SIZE)
-                {
-                    if (token.IsCancellationRequested) return;
-                    int end = Math.Min(start + BATCH_SIZE, photos.Count);
-                    var batch = new List<KeyValuePair<PhotoItemViewModel, PhotoMetadata>>(end - start);
-
-                    Parallel.For(start, end, options, index =>
-                    {
-                        var f = photos[index];
-                        var meta = PhotoIndexer.ReadExif(f);
-                        lock (batch) batch.Add(new KeyValuePair<PhotoItemViewModel, PhotoMetadata>(f, meta));
-                    });
-
-                    if (token.IsCancellationRequested) return;
-                    Dispatcher.Invoke(() =>
-                    {
-                        foreach (var i in batch) i.Key.Meta = i.Value;
-                        _exifReadCount += batch.Count;
-                        UpdateProgressBar();
-                    });
-                }
-            });
-
-            Dispatcher.Invoke(() =>
-            {
-                _exifReadCount = photos.Count;
-                UpdateProgressBar();
-                if (_focus != null) UpdateExifPanel();
-            });
+            // EXIF is read strictly on-demand for visible and focused photos,
+            // avoiding massive background disk and CPU churn.
+            PrioritizeVisible();
+            if (_focus != null) UpdateExifPanel();
         }
 
         private void UpdateProgressBar()
         {
-            if (_photos.Count == 0) { Barra.Visibility = Visibility.Collapsed; return; }
-            Barra.Visibility = Visibility.Visible;
-            Barra.Value = 100.0 * _exifReadCount / _photos.Count;
-            if (_exifReadCount >= _photos.Count)
-            {
-                Barra.Visibility = Visibility.Collapsed;
+            Barra.Visibility = Visibility.Collapsed;
+            if (_photos != null && _photos.Count > 0)
                 TxtStatus.Text = Strings.T("status.ready", _photos.Count);
-            }
         }
 
         // =========================== save ===========================

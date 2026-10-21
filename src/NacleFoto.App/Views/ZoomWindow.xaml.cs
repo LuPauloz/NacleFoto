@@ -97,6 +97,10 @@ namespace NacleFoto.App.Views
         private void UpdateMetadata()
         {
             if (_photo == null) return;
+            if (_photo.Meta == null)
+            {
+                try { _photo.Meta = NacleFoto.App.Services.PhotoIndexer.ReadExif(_photo); } catch { }
+            }
             var m = _photo.Meta;
             if (m == null) { TxtDados.Text = _photo.SizeText; return; }
             var parts = new List<string>();
