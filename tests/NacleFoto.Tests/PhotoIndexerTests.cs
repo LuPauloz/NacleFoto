@@ -88,5 +88,42 @@ namespace NacleFoto.Tests
             Assert.DoesNotContain("node_modules", subfolders);
             Assert.DoesNotContain("_nacle", subfolders);
         }
+
+        [Fact]
+        public void Scan_RootOnly_WhenIncludeAllSubfoldersFalse_DoesNotTraverseSubfolders()
+        {
+            var cerimonia = Path.Combine(_tempDir, "Cerimonia");
+            Directory.CreateDirectory(cerimonia);
+
+            File.WriteAllBytes(Path.Combine(_tempDir, "raiz.jpg"), new byte[] { 0xFF, 0xD8, 0xFF });
+            File.WriteAllBytes(Path.Combine(cerimonia, "sub.jpg"), new byte[] { 0xFF, 0xD8, 0xFF });
+
+            var indexer = new PhotoIndexer();
+            var results = indexer.Scan(new[] { _tempDir }, null, false, null, null, default(System.Threading.CancellationToken), false, null);
+
+            Assert.Single(results);
+            Assert.Equal("raiz.jpg", results[0].Name);
+        }
+
+        [Fact]
+        public void Scan_SelectiveSubfolders_OnlyTraversesIncludedSubfolders()
+        {
+            var cerimonia = Path.Combine(_tempDir, "Cerimonia");
+            var festa = Path.Combine(_tempDir, "Festa");
+            Directory.CreateDirectory(cerimonia);
+            Directory.CreateDirectory(festa);
+
+            File.WriteAllBytes(Path.Combine(_tempDir, "raiz.jpg"), new byte[] { 0xFF, 0xD8, 0xFF });
+            File.WriteAllBytes(Path.Combine(cerimonia, "foto_cerimonia.jpg"), new byte[] { 0xFF, 0xD8, 0xFF });
+            File.WriteAllBytes(Path.Combine(festa, "foto_festa.jpg"), new byte[] { 0xFF, 0xD8, 0xFF });
+
+            var indexer = new PhotoIndexer();
+            var results = indexer.Scan(new[] { _tempDir }, null, false, null, null, default(System.Threading.CancellationToken), false, new[] { "Cerimonia" });
+
+            Assert.Equal(2, results.Count);
+            Assert.Contains(results, r => r.Name == "raiz.jpg");
+            Assert.Contains(results, r => r.Name == "foto_cerimonia.jpg");
+            Assert.DoesNotContain(results, r => r.Name == "foto_festa.jpg");
+        }
     }
 }

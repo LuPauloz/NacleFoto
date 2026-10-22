@@ -66,6 +66,12 @@ namespace NacleFoto.Core.Models
         /// <summary>Subfolders excluded from indexing (path relative to RootFolder).</summary>
         public List<string> ExcludedFolders { get; set; } = new List<string>();
 
+        /// <summary>Whether all subfolders under RootFolder are included.</summary>
+        public bool IncludeAllSubfolders { get; set; } = false;
+
+        /// <summary>Subfolders explicitly included when IncludeAllSubfolders is false (paths relative to RootFolder).</summary>
+        public List<string> IncludedSubfolders { get; set; } = new List<string>();
+
         public List<SelectionItem> Selection { get; set; } = new List<SelectionItem>();
 
         public WeddingState State { get; set; } = WeddingState.Open;
@@ -114,6 +120,8 @@ namespace NacleFoto.Core.Models
                 RootFolder = RootFolder,
                 ExtraFolders = new List<string>(ExtraFolders ?? new List<string>()),
                 ExcludedFolders = new List<string>(ExcludedFolders ?? new List<string>()),
+                IncludeAllSubfolders = IncludeAllSubfolders,
+                IncludedSubfolders = new List<string>(IncludedSubfolders ?? new List<string>()),
                 Selection = new List<SelectionItem>(Selection ?? new List<SelectionItem>()),
                 State = State,
                 ClosedAt = ClosedAt,

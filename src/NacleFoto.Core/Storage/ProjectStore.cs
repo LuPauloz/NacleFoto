@@ -105,6 +105,7 @@ namespace NacleFoto.Core.Storage
                 if (c.Selection == null) c.Selection = new List<SelectionItem>();
                 if (c.Packages == null) c.Packages = new List<PackagePart>();
                 if (c.ExcludedFolders == null) c.ExcludedFolders = new List<string>();
+                if (c.IncludedSubfolders == null) c.IncludedSubfolders = new List<string>();
                 if (c.ExtraFolders == null) c.ExtraFolders = new List<string>();
                 return c;
             }

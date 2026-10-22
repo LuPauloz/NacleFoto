@@ -73,7 +73,9 @@ namespace NacleFoto.App
                 Name = NameWithIndex(folder),
                 Type = "Wedding",
                 RootFolder = folder,
-                State = WeddingState.Open
+                State = WeddingState.Open,
+                IncludeAllSubfolders = false,
+                IncludedSubfolders = new List<string>()
             };
             TelaProjetos.Visibility = Visibility.Collapsed;
             TelaSelecao.Visibility = Visibility.Visible;
