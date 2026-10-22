@@ -10,12 +10,14 @@ namespace NacleFoto.App.ViewModels
     {
         public PhotoRowViewModel(IList<PhotoItemViewModel> photos, int columns, int rowWidth)
         {
-            Photos = photos;
+            Photos = photos is System.Collections.ObjectModel.ObservableCollection<PhotoItemViewModel> oc
+                ? oc
+                : new System.Collections.ObjectModel.ObservableCollection<PhotoItemViewModel>(photos);
             Columns = columns;
             RowWidth = rowWidth;
         }
 
-        public IList<PhotoItemViewModel> Photos { get; private set; }
+        public System.Collections.ObjectModel.ObservableCollection<PhotoItemViewModel> Photos { get; private set; }
         public int Columns { get; private set; }
         public int RowWidth { get; private set; }
     }

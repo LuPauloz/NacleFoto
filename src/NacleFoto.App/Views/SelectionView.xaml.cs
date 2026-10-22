@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using System.Windows.Media;
 using System.Windows.Threading;
 using NacleFoto.App.Services;
 using NacleFoto.App.ViewModels;
@@ -67,7 +68,8 @@ namespace NacleFoto.App.Views
 
         private Wedding _wedding;
         private readonly List<PhotoItemViewModel> _photos = new List<PhotoItemViewModel>();
-        private List<PhotoRowViewModel> _rows = new List<PhotoRowViewModel>();
+        private readonly System.Collections.ObjectModel.ObservableCollection<PhotoRowViewModel> _rows =
+            new System.Collections.ObjectModel.ObservableCollection<PhotoRowViewModel>();
         private PhotoItemViewModel _focus;
         private ThumbService _thumbs;
         private ThumbnailCache _cache;
@@ -83,7 +85,7 @@ namespace NacleFoto.App.Views
         public SelectionView()
         {
             InitializeComponent();
-            Scroller.SizeChanged += (s, e) => RecalculateColumns();
+            PhotoGrid.ItemsSource = _rows;
             PreviewKeyDown += SelectionView_PreviewKeyDown;
             _isReady = true;
         }
@@ -120,46 +122,13 @@ namespace NacleFoto.App.Views
             if (_wedding.ExtraFolders != null) roots.AddRange(_wedding.ExtraFolders);
 
             _scanning = true;
+            _photos.Clear();
+            _rows.Clear();
             Barra.Visibility = Visibility.Visible;
             Barra.Value = 0;
             TxtStatus.Text = Strings.T("status.scanning");
 
-            var excludeCloud = !App.Settings.IncludeCloudFiles;
-            var wedding = _wedding;
-            var found = await Task.Run(() =>
-            {
-                var indexer = new PhotoIndexer();
-                return indexer.Scan(roots, wedding.ExcludedFolders, excludeCloud,
-                    n => Dispatcher.Invoke(() => { Barra.Value = Math.Min(100, n / 50.0); }),
-                    warning => Dispatcher.Invoke(() => TxtStatus.Text = warning));
-            });
-
-            if (wedding != _wedding) return; // user switched wedding mid-scan
-
-            _photos.Clear();
-            _photos.AddRange(found);
-
-            // a photo the app was started with: opens in full screen now
-            OpenPendingPhoto();
-
-            // restore saved selection
-            var selectedMap = new Dictionary<string, SelectionItem>(StringComparer.OrdinalIgnoreCase);
-            if (_wedding.Selection != null)
-                foreach (var s in _wedding.Selection)
-                    selectedMap[s.Path] = s;
-
-            foreach (var f in _photos)
-            {
-                SelectionItem s;
-                if (selectedMap.TryGetValue(f.RelativePath, out s))
-                {
-                    f.IsSelected = true;
-                    f.Rating = s.Rating;
-                    f.Color = s.Color;
-                }
-            }
-
-            // thumbnail cache (keyed by volume: USB drive with changed drive letter is reused)
+            // Prepare thumbnail cache immediately so incoming streaming batches can fetch thumbs
             try
             {
                 var volumeKey = VolumeIdentity.GetVolumeKey(
@@ -167,16 +136,50 @@ namespace NacleFoto.App.Views
                 _cache = new ThumbnailCache(App.AppDataDir, volumeKey,
                     string.IsNullOrEmpty(_wedding.RootFolder) ? roots.FirstOrDefault() ?? "" : _wedding.RootFolder,
                     App.Settings.ThumbnailSize);
-                _thumbs = new ThumbService(_cache, App.Settings.ThumbnailSize, 1);
+                if (_thumbs != null) _thumbs.Dispose();
+                _thumbs = new ThumbService(_cache, App.Settings.ThumbnailSize, 2);
             }
             catch (Exception)
             {
                 _cache = null;
-                _thumbs = new ThumbService(null, App.Settings.ThumbnailSize, 1);
+                if (_thumbs != null) _thumbs.Dispose();
+                _thumbs = new ThumbService(null, App.Settings.ThumbnailSize, 2);
             }
 
+            var selectedMap = new Dictionary<string, SelectionItem>(StringComparer.OrdinalIgnoreCase);
+            if (_wedding.Selection != null)
+            {
+                foreach (var s in _wedding.Selection)
+                    selectedMap[s.Path] = s;
+            }
+
+            var excludeCloud = !App.Settings.IncludeCloudFiles;
+            var wedding = _wedding;
+            var found = await Task.Run(() =>
+            {
+                var indexer = new PhotoIndexer();
+                return indexer.Scan(roots, wedding.ExcludedFolders, excludeCloud,
+                    n => Dispatcher.BeginInvoke(new Action(() => { Barra.Value = Math.Min(100, n / 50.0); })),
+                    warning => Dispatcher.BeginInvoke(new Action(() => TxtStatus.Text = warning)),
+                    default(CancellationToken),
+                    wedding.IncludeAllSubfolders,
+                    wedding.IncludedSubfolders,
+                    batch => Dispatcher.BeginInvoke(new Action(() =>
+                    {
+                        if (wedding == _wedding)
+                            AppendBatch(batch, selectedMap);
+                    })));
+            });
+
+            if (wedding != _wedding) return; // user switched wedding mid-scan
+
+            if (_photos.Count == 0 && found != null && found.Count > 0)
+            {
+                AppendBatch(found, selectedMap);
+            }
+
+            OpenPendingPhoto();
             BuildFolderList();
-            RebuildGrid();
             UpdateCounters();
             Barra.Visibility = Visibility.Collapsed;
             _scanning = false;
@@ -185,29 +188,99 @@ namespace NacleFoto.App.Views
             RequestThumbnails();
         }
 
+        private void AppendBatch(List<PhotoItemViewModel> batch, Dictionary<string, SelectionItem> selectedMap)
+        {
+            if (batch == null || batch.Count == 0) return;
+
+            foreach (var f in batch)
+            {
+                if (selectedMap != null && selectedMap.TryGetValue(f.RelativePath, out var s))
+                {
+                    f.IsSelected = true;
+                    f.Rating = s.Rating;
+                    f.Color = s.Color;
+                }
+            }
+
+            _photos.AddRange(batch);
+
+            bool onlyMarked = FilterMarked.IsChecked == true;
+            bool onlyUnmarked = FilterUnmarked.IsChecked == true;
+
+            var filtered = new List<PhotoItemViewModel>();
+            foreach (var f in batch)
+            {
+                if (onlyMarked && !f.IsSelected) continue;
+                if (onlyUnmarked && f.IsSelected) continue;
+                filtered.Add(f);
+            }
+
+            if (filtered.Count == 0)
+            {
+                UpdateCounters();
+                return;
+            }
+
+            if (_columns < 1) _columns = CalculateColumns();
+            int rowWidth = _columns * TileSize;
+            int offset = 0;
+
+            if (_rows.Count > 0)
+            {
+                var lastRow = _rows[_rows.Count - 1];
+                if (lastRow.Photos.Count < _columns)
+                {
+                    int needed = _columns - lastRow.Photos.Count;
+                    int take = Math.Min(needed, filtered.Count);
+                    for (int i = 0; i < take; i++)
+                        lastRow.Photos.Add(filtered[i]);
+                    offset = take;
+                }
+            }
+
+            while (offset < filtered.Count)
+            {
+                int count = Math.Min(_columns, filtered.Count - offset);
+                var slice = filtered.GetRange(offset, count);
+                _rows.Add(new PhotoRowViewModel(slice, _columns, rowWidth));
+                offset += count;
+            }
+
+            TxtStatus.Text = Strings.T("status.folderCount", _photos.Count, _photos.Count);
+            UpdateCounters();
+            PrioritizeVisible();
+        }
+
         private void BuildFolderList()
         {
             var items = new List<FolderItemViewModel>();
             var root = _wedding.RootFolder;
             if (!string.IsNullOrEmpty(root))
             {
-                items.Add(new FolderItemViewModel
-                {
-                    Name = Strings.T("selection.allFolders"),
-                    RelativePath = null,
-                    IsIncluded = true
-                });
                 var subfolders = PhotoIndexer.ListSubfolders(root);
-                foreach (var s in subfolders)
+                if (subfolders.Count > 0)
                 {
-                    var norm = s.Replace('\\', '/');
-                    var excluded = _wedding.ExcludedFolders.Contains(norm, StringComparer.OrdinalIgnoreCase);
                     items.Add(new FolderItemViewModel
                     {
-                        Name = s.Replace('\\', '/'),
-                        RelativePath = norm,
-                        IsIncluded = !excluded
+                        Name = Strings.T("selection.allFolders"),
+                        RelativePath = null,
+                        IsIncluded = _wedding.IncludeAllSubfolders
                     });
+
+                    foreach (var s in subfolders)
+                    {
+                        var norm = s.Replace('\\', '/');
+                        bool isIncluded = _wedding.IncludeAllSubfolders
+                            ? !_wedding.ExcludedFolders.Contains(norm, StringComparer.OrdinalIgnoreCase)
+                            : (_wedding.IncludedSubfolders != null && _wedding.IncludedSubfolders.Contains(norm, StringComparer.OrdinalIgnoreCase));
+
+                        items.Add(new FolderItemViewModel
+                        {
+                            Name = s.Replace('\\', '/'),
+                            RelativePath = norm,
+                            IsIncluded = isIncluded
+                        });
+                    }
                 }
             }
             foreach (var p in _wedding.ExtraFolders)
@@ -219,12 +292,45 @@ namespace NacleFoto.App.Views
 
         // =========================== grid ===========================
 
+        private ScrollViewer _scroller;
+        private ScrollViewer Scroller
+        {
+            get
+            {
+                if (_scroller == null && PhotoGrid != null)
+                    _scroller = FindVisualChild<ScrollViewer>(PhotoGrid);
+                return _scroller;
+            }
+        }
+
+        private static T FindVisualChild<T>(DependencyObject parent) where T : DependencyObject
+        {
+            if (parent == null) return null;
+            int count = VisualTreeHelper.GetChildrenCount(parent);
+            for (int i = 0; i < count; i++)
+            {
+                var child = VisualTreeHelper.GetChild(parent, i);
+                if (child is T typed) return typed;
+                var found = FindVisualChild<T>(child);
+                if (found != null) return found;
+            }
+            return null;
+        }
+
+        private void PhotoGrid_ScrollChanged(object sender, ScrollChangedEventArgs e)
+        {
+            if (e.VerticalChange != 0) PrioritizeVisible();
+        }
+
+        private void PhotoGrid_SizeChanged(object sender, SizeChangedEventArgs e)
+        {
+            RecalculateColumns();
+        }
+
         private int CalculateColumns()
         {
-            if (Scroller == null) return 1;
-            double w = Scroller.ActualWidth;
-            if (w < 200) w = 800;
-            return Math.Max(1, (int)((w - 6) / TileSize));
+            double w = PhotoGrid != null && PhotoGrid.ActualWidth > 200 ? PhotoGrid.ActualWidth : 800;
+            return Math.Max(1, (int)((w - 24) / TileSize));
         }
 
         private void RecalculateColumns()
@@ -251,14 +357,13 @@ namespace NacleFoto.App.Views
                 visible.Add(f);
             }
 
-            _rows = new List<PhotoRowViewModel>();
+            _rows.Clear();
             for (int i = 0; i < visible.Count; i += _columns)
             {
                 var slice = visible.GetRange(i, Math.Min(_columns, visible.Count - i));
                 _rows.Add(new PhotoRowViewModel(slice, _columns, _columns * TileSize));
             }
 
-            PhotoGrid.ItemsSource = _rows;
             TxtStatus.Text = _photos.Count == 0
                 ? Strings.T("status.noPhotos")
                 : Strings.T("status.folderCount", _photos.Count, visible.Count);
@@ -290,8 +395,6 @@ namespace NacleFoto.App.Views
             if (idx < 0) idx = 0;
 
             var window = new ZoomWindow();
-            // owner = the app window: the photo stays above the grid, but Alt+Tab
-            // works normally (a window on top of everything gets stuck)
             try { window.Owner = Window.GetWindow(this); } catch (Exception) { }
             window.Open(visible, idx);
             window.NavigationRequested += d => window.Navigate(d);
@@ -301,7 +404,13 @@ namespace NacleFoto.App.Views
                 UpdateExifPanel();
                 if (window.IsLoaded) window.UpdateMarkedState();
             };
-            window.Closed += (s, ee) => RebuildGrid();
+            window.Closed += (s, ee) =>
+            {
+                if (FilterMarked.IsChecked == true || FilterUnmarked.IsChecked == true)
+                    RebuildGrid();
+                else
+                    UpdateCounters();
+            };
             window.Show();
         }
 
@@ -512,8 +621,10 @@ namespace NacleFoto.App.Views
         {
             var list = new List<PhotoItemViewModel>();
             if (_rows.Count == 0) return list;
-            int first = Math.Max(0, (int)(Scroller.VerticalOffset / TileSize));
-            int last = Math.Min(_rows.Count - 1, (int)((Scroller.VerticalOffset + Scroller.ViewportHeight) / TileSize));
+            double vo = Scroller != null ? Scroller.VerticalOffset : 0;
+            double vh = Scroller != null && Scroller.ViewportHeight > 0 ? Scroller.ViewportHeight : 900;
+            int first = Math.Max(0, (int)(vo / TileSize));
+            int last = Math.Min(_rows.Count - 1, (int)((vo + vh) / TileSize));
             for (int i = first; i <= last; i++) list.AddRange(_rows[i].Photos);
             return list;
         }
@@ -538,16 +649,43 @@ namespace NacleFoto.App.Views
             var chk = sender as CheckBox;
             if (chk == null) return;
             var item = chk.DataContext as FolderItemViewModel;
-            if (item == null || item.RelativePath == null) return;
+            if (item == null) return;
 
-            var norm = item.RelativePath;
-            if (chk.IsChecked == true)
-                _wedding.ExcludedFolders.RemoveAll(x => string.Equals(x, norm, StringComparison.OrdinalIgnoreCase));
+            if (item.RelativePath == null) // "Todas as pastas"
+            {
+                bool checkAll = chk.IsChecked == true;
+                _wedding.IncludeAllSubfolders = checkAll;
+                _wedding.ExcludedFolders.Clear();
+                if (_wedding.IncludedSubfolders == null) _wedding.IncludedSubfolders = new List<string>();
+                _wedding.IncludedSubfolders.Clear();
+            }
             else
             {
-                if (!_wedding.ExcludedFolders.Contains(norm, StringComparer.OrdinalIgnoreCase))
-                    _wedding.ExcludedFolders.Add(norm);
+                var norm = item.RelativePath;
+                if (_wedding.IncludedSubfolders == null) _wedding.IncludedSubfolders = new List<string>();
+
+                if (_wedding.IncludeAllSubfolders)
+                {
+                    if (chk.IsChecked == true)
+                        _wedding.ExcludedFolders.RemoveAll(x => string.Equals(x, norm, StringComparison.OrdinalIgnoreCase));
+                    else if (!_wedding.ExcludedFolders.Contains(norm, StringComparer.OrdinalIgnoreCase))
+                        _wedding.ExcludedFolders.Add(norm);
+                }
+                else
+                {
+                    if (chk.IsChecked == true)
+                    {
+                        if (!_wedding.IncludedSubfolders.Contains(norm, StringComparer.OrdinalIgnoreCase))
+                            _wedding.IncludedSubfolders.Add(norm);
+                    }
+                    else
+                    {
+                        _wedding.IncludedSubfolders.RemoveAll(x => string.Equals(x, norm, StringComparison.OrdinalIgnoreCase));
+                    }
+                }
             }
+
+            BuildFolderList();
             Scan();
             ScheduleSave();
         }

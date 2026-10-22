@@ -24,7 +24,8 @@ namespace NacleFoto.App.Services
             ".git", ".vs", ".vscode", ".idea", ".github",
             "node_modules", "_nacle", "$recycle.bin", "$sysreset",
             "system volume information", "appdata", "windows",
-            "program files", "program files (x86)", "recovery"
+            "program files", "program files (x86)", "recovery",
+            "backups", "databases"
         };
 
         public static bool ShouldSkipDirectory(string dirName, FileAttributes attrs = 0)
@@ -33,6 +34,8 @@ namespace NacleFoto.App.Services
             if (IgnoredDirectories.Contains(dirName)) return true;
             if (dirName.StartsWith(".") && dirName.Length > 1) return true;
             if ((attrs & (FileAttributes.Hidden | FileAttributes.System)) != 0) return true;
+            if (dirName.IndexOf("voice notes", StringComparison.OrdinalIgnoreCase) >= 0) return true;
+            if (dirName.IndexOf("video notes", StringComparison.OrdinalIgnoreCase) >= 0) return true;
             return false;
         }
 
@@ -73,10 +76,21 @@ namespace NacleFoto.App.Services
                                       bool includeCloud = false,
                                       Action<int> progress = null,
                                       Action<string> warning = null,
-                                      CancellationToken cancel = default(CancellationToken))
+                                      CancellationToken cancel = default(CancellationToken),
+                                      bool includeAllSubfolders = true,
+                                      ICollection<string> includedSubfolders = null,
+                                      Action<List<PhotoItemViewModel>> batchProgress = null)
         {
             var result = new List<PhotoItemViewModel>();
+            var currentBatch = new List<PhotoItemViewModel>();
+            int targetBatchSize = 40;
+
             var exclusions = (excluded ?? new List<string>())
+                .Where(e => !string.IsNullOrWhiteSpace(e))
+                .Select(e => e.Replace('\\', '/').TrimEnd('/'))
+                .ToList();
+
+            var inclusions = (includedSubfolders ?? new List<string>())
                 .Where(e => !string.IsNullOrWhiteSpace(e))
                 .Select(e => e.Replace('\\', '/').TrimEnd('/'))
                 .ToList();
@@ -144,8 +158,20 @@ namespace NacleFoto.App.Services
                             try
                             {
                                 var info = new FileInfo(file);
-                                result.Add(new PhotoItemViewModel(relNorm, file, info.Length, info.LastWriteTimeUtc.Ticks));
+                                var item = new PhotoItemViewModel(relNorm, file, info.Length, info.LastWriteTimeUtc.Ticks);
+                                result.Add(item);
                                 if (progress != null && result.Count % 50 == 0) progress(result.Count);
+
+                                if (batchProgress != null)
+                                {
+                                    currentBatch.Add(item);
+                                    if (currentBatch.Count >= targetBatchSize)
+                                    {
+                                        batchProgress(currentBatch);
+                                        currentBatch = new List<PhotoItemViewModel>();
+                                        targetBatchSize = 100;
+                                    }
+                                }
                             }
                             catch (Exception) { }
                         }
@@ -155,6 +181,9 @@ namespace NacleFoto.App.Services
 
                     if (current.Depth < maxDepth)
                     {
+                        if (!includeAllSubfolders && inclusions.Count == 0)
+                            continue;
+
                         IEnumerable<string> subDirs = null;
                         try
                         {
@@ -176,13 +205,30 @@ namespace NacleFoto.App.Services
                             string subRel;
                             try { subRel = GetRelativePath(root, dir).Replace('\\', '/'); }
                             catch { subRel = null; }
-                            if (!string.IsNullOrEmpty(subRel) && exclusions.Any(x => string.Equals(x, subRel, StringComparison.OrdinalIgnoreCase) || subRel.StartsWith(x + "/", StringComparison.OrdinalIgnoreCase)))
+                            if (string.IsNullOrEmpty(subRel)) continue;
+
+                            if (exclusions.Any(x => string.Equals(x, subRel, StringComparison.OrdinalIgnoreCase) || subRel.StartsWith(x + "/", StringComparison.OrdinalIgnoreCase)))
                                 continue;
+
+                            if (!includeAllSubfolders)
+                            {
+                                bool isIncluded = inclusions.Any(x =>
+                                    string.Equals(x, subRel, StringComparison.OrdinalIgnoreCase) ||
+                                    subRel.StartsWith(x + "/", StringComparison.OrdinalIgnoreCase) ||
+                                    x.StartsWith(subRel + "/", StringComparison.OrdinalIgnoreCase));
+                                if (!isIncluded) continue;
+                            }
 
                             queue.Enqueue(new DirEntry(dir, current.Depth + 1));
                         }
                     }
                 }
+            }
+
+            if (batchProgress != null && currentBatch.Count > 0)
+            {
+                batchProgress(currentBatch);
+                currentBatch.Clear();
             }
 
             result.Sort((a, b) => string.Compare(a.RelativePath, b.RelativePath, StringComparison.OrdinalIgnoreCase));
