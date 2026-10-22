@@ -35,8 +35,7 @@ namespace NacleFoto.App.Views
         {
             InitializeComponent();
             KeyDown += ZoomWindow_KeyDown;
-            Loaded += (s, e) => Center();
-            SizeChanged += (s, e) => { if (!_dragging && _scale.ScaleX <= 1.0001) Center(); };
+            Loaded += (s, e) => FitToScreen();
         }
 
         public void Open(IList<PhotoItemViewModel> photos, int index)
@@ -130,37 +129,50 @@ namespace NacleFoto.App.Views
                 Source = bmp,
                 Width = bmp.PixelWidth,
                 Height = bmp.PixelHeight,
-                Stretch = Stretch.None,
+                Stretch = Stretch.Fill,
                 RenderTransform = new TransformGroup { Children = { _scale, _translation } },
                 SnapsToDevicePixels = false
             };
             Cnv.Children.Clear();
             Cnv.Children.Add(image);
-
-            // initial zoom: fit to screen (a 6000px photo will not fit on screen)
-            double scale = 1.0;
-            if (bmp.PixelWidth > 0 && bmp.PixelHeight > 0 && (ActualWidth > 0 || ActualHeight > 0))
-            {
-                double usableWidth = Math.Max(200, ActualWidth - 40);
-                double usableHeight = Math.Max(200, ActualHeight - 110);
-                scale = Math.Min(usableWidth / bmp.PixelWidth, usableHeight / bmp.PixelHeight);
-                if (scale > 1.0) scale = 1.0;
-            }
-            _scale.ScaleX = _scale.ScaleY = scale;
-            Center();
+            FitToScreen();
             _loading = false;
         }
 
+        private void FitToScreen()
+        {
+            if (Cnv.Children.Count == 0) return;
+            var img = Cnv.Children[0] as Image;
+            if (img == null || img.Width <= 0 || img.Height <= 0) return;
+
+            double winW = ActualWidth > 0 ? ActualWidth : SystemParameters.PrimaryScreenWidth;
+            double winH = ActualHeight > 0 ? ActualHeight : SystemParameters.PrimaryScreenHeight;
+
+            double usableWidth = Math.Max(200, winW - 40);
+            double usableHeight = Math.Max(200, winH - 120);
+
+            double scale = Math.Min(usableWidth / img.Width, usableHeight / img.Height);
+            if (scale > 1.0) scale = 1.0;
+            if (scale <= 0.001) scale = 0.1;
+
+            _scale.ScaleX = _scale.ScaleY = scale;
+            Center();
+        }
 
         private void Center()
         {
             if (Cnv.Children.Count == 0) return;
-            var img = (Image)Cnv.Children[0];
+            var img = Cnv.Children[0] as Image;
+            if (img == null) return;
+
+            double winW = ActualWidth > 0 ? ActualWidth : SystemParameters.PrimaryScreenWidth;
+            double winH = ActualHeight > 0 ? ActualHeight : SystemParameters.PrimaryScreenHeight;
+
             double w = img.Width * _scale.ScaleX;
             double h = img.Height * _scale.ScaleY;
-            // the bottom bar covers the lower part: center slightly higher
-            _translation.X = (ActualWidth - w) / 2;
-            _translation.Y = (ActualHeight - h) / 2 - 30;
+
+            _translation.X = (winW - w) / 2.0;
+            _translation.Y = Math.Max(10, (winH - h) / 2.0 - 25);
         }
 
 
@@ -168,19 +180,14 @@ namespace NacleFoto.App.Views
         {
             if (_loading || Cnv.Children.Count == 0) return;
             double factor = e.Delta > 0 ? 1.18 : 1 / 1.18;
-            double newScale = Math.Max(0.05, Math.Min(12, _scale.ScaleX * factor));
-            double ratio = newScale / _scale.ScaleX;
+            double currentScale = _scale.ScaleX;
+            double newScale = Math.Max(0.05, Math.Min(20, currentScale * factor));
+            double ratio = newScale / currentScale;
 
-            var img = (Image)Cnv.Children[0];
             var pos = e.GetPosition(Cnv);
-            // keeps the point under the cursor
-            double centerX = img.Width / 2, centerY = img.Height / 2;
-            double px = (pos.X - _translation.X - centerX * _scale.ScaleX) / _scale.ScaleX + centerX;
-            double py = (pos.Y - _translation.Y - centerY * _scale.ScaleY) / _scale.ScaleY + centerY;
-
             _scale.ScaleX = _scale.ScaleY = newScale;
-            _translation.X = pos.X - (px - centerX) * newScale - centerX * newScale;
-            _translation.Y = pos.Y - (py - centerY) * newScale - centerY * newScale;
+            _translation.X = pos.X - (pos.X - _translation.X) * ratio;
+            _translation.Y = pos.Y - (pos.Y - _translation.Y) * ratio;
             e.Handled = true;
         }
 
@@ -230,17 +237,19 @@ namespace NacleFoto.App.Views
                     e.Handled = true;
                     break;
                 case Key.F:
-                    if (Cnv.Children.Count > 0)
-                    {
-                        var img = (Image)Cnv.Children[0];
-                        double scale = Math.Min((ActualWidth - 40) / img.Width, (ActualHeight - 110) / img.Height);
-                        if (scale > 1) scale = 1;
-                        _scale.ScaleX = _scale.ScaleY = scale;
-                    }
-                    Center();
+                    FitToScreen();
                     e.Handled = true;
                     break;
             }
+        }
+
+        protected override void OnClosed(EventArgs e)
+        {
+            base.OnClosed(e);
+            Cnv.Children.Clear();
+            _cache.Clear();
+            _photos = null;
+            _photo = null;
         }
 
         private void BtnClose_Click(object sender, RoutedEventArgs e)
