@@ -35,7 +35,29 @@ namespace NacleFoto.App.Views
         {
             InitializeComponent();
             KeyDown += ZoomWindow_KeyDown;
-            Loaded += (s, e) => FitToScreen();
+            Loaded += ZoomWindow_Loaded;
+            SizeChanged += ZoomWindow_SizeChanged;
+        }
+
+        private void ZoomWindow_Loaded(object sender, RoutedEventArgs e)
+        {
+            if (Owner == null)
+            {
+                WindowStartupLocation = WindowStartupLocation.CenterScreen;
+            }
+            if (WindowState != WindowState.Maximized)
+            {
+                WindowState = WindowState.Maximized;
+            }
+            FitToScreen();
+        }
+
+        private void ZoomWindow_SizeChanged(object sender, SizeChangedEventArgs e)
+        {
+            if (!_dragging && _scale.ScaleX <= 1.0001)
+            {
+                FitToScreen();
+            }
         }
 
         public void Open(IList<PhotoItemViewModel> photos, int index)
@@ -145,8 +167,8 @@ namespace NacleFoto.App.Views
             var img = Cnv.Children[0] as Image;
             if (img == null || img.Width <= 0 || img.Height <= 0) return;
 
-            double winW = ActualWidth > 0 ? ActualWidth : SystemParameters.PrimaryScreenWidth;
-            double winH = ActualHeight > 0 ? ActualHeight : SystemParameters.PrimaryScreenHeight;
+            double winW = Cnv.ActualWidth > 0 ? Cnv.ActualWidth : (ActualWidth > 0 ? ActualWidth : SystemParameters.PrimaryScreenWidth);
+            double winH = Cnv.ActualHeight > 0 ? Cnv.ActualHeight : (ActualHeight > 0 ? ActualHeight : SystemParameters.PrimaryScreenHeight);
 
             double usableWidth = Math.Max(200, winW - 40);
             double usableHeight = Math.Max(200, winH - 120);
@@ -165,8 +187,8 @@ namespace NacleFoto.App.Views
             var img = Cnv.Children[0] as Image;
             if (img == null) return;
 
-            double winW = ActualWidth > 0 ? ActualWidth : SystemParameters.PrimaryScreenWidth;
-            double winH = ActualHeight > 0 ? ActualHeight : SystemParameters.PrimaryScreenHeight;
+            double winW = Cnv.ActualWidth > 0 ? Cnv.ActualWidth : (ActualWidth > 0 ? ActualWidth : SystemParameters.PrimaryScreenWidth);
+            double winH = Cnv.ActualHeight > 0 ? Cnv.ActualHeight : (ActualHeight > 0 ? ActualHeight : SystemParameters.PrimaryScreenHeight);
 
             double w = img.Width * _scale.ScaleX;
             double h = img.Height * _scale.ScaleY;
