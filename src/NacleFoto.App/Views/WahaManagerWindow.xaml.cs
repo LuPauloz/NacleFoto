@@ -108,11 +108,32 @@ namespace NacleFoto.App.Views
 
         private async void BtnUpdate_Click(object sender, RoutedEventArgs e)
         {
+            var client = GetCurrentWahaClient();
+            bool wasRunning = client != null && client.IsRunning();
+
             _busy = true; UpdateStatus();
             Log(Strings.T("waha.updating"));
-            var r = await Task.Run(() => _manager.Update(Log));
-            Log(r.Output);
-            _busy = false; UpdateStatus();
+
+            var port = GetPort(App.Settings.WahaUrl);
+            var r = await Task.Run(() => _manager.Update(Log, port));
+            if (r.Ok)
+            {
+                Log(Strings.T("waha.installed"));
+                _busy = false;
+                UpdateStatus();
+
+                if (wasRunning)
+                {
+                    BtnStart_Click(sender, e);
+                }
+            }
+            else
+            {
+                Log(Strings.T("waha.installFailed"));
+                Log(GetLastLines(r.Output, 12));
+                _busy = false;
+                UpdateStatus();
+            }
         }
 
         private async void BtnStart_Click(object sender, RoutedEventArgs e)

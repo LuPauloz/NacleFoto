@@ -158,12 +158,19 @@ namespace NacleFoto.Core.Linking
         }
 
         /// <summary>Updates WAHA to the latest version.</summary>
-        public CommandResult Update(Action<string> progress = null)
+        public CommandResult Update(Action<string> progress = null, int port = DefaultPort)
         {
-            var pull = Shell.Run("git", "pull origin core --depth 1", InstallDir, 600, progress);
-            if (!pull.Ok) return pull;
+            StopServer(port);
+
+            var fetch = Shell.Run("git", "fetch origin core --depth 1", InstallDir, 300, progress);
+            if (!fetch.Ok) return fetch;
+
+            var reset = Shell.Run("git", "reset --hard origin/core", InstallDir, 60, progress);
+            if (!reset.Ok) return reset;
+
             var install = InstallDependencies(progress);
             if (!install.Ok) return install;
+
             return Build(progress);
         }
 
@@ -265,7 +272,9 @@ namespace NacleFoto.Core.Linking
             if (pid <= 0) return false;
             try
             {
-                Process.GetProcessById(pid).Kill();
+                var p = Process.GetProcessById(pid);
+                p.Kill();
+                p.WaitForExit(5000);
                 return true;
             }
             catch (Exception)
